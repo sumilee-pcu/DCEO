@@ -10,30 +10,71 @@ document.addEventListener('DOMContentLoaded', () => {
         updateChartTheme();
     });
 
-    // 데이터 초기화
+    // 종목 정보 (시총은 표시용, 가격/등락은 실시간 조회)
     const marketData = {
         domestic: [
-            { name: '삼성전자', symbol: '005930', price: '216,500', change: '-0.46%', cap: '1,298조' },
-            { name: 'SK하이닉스', symbol: '000660', price: '1,130,500', change: '+2.12%', cap: '822조' },
-            { name: 'LG에너지솔루션', symbol: '373220', price: '416,000', change: '-0.50%', cap: '97조' },
-            { name: '삼성바이오로직스', symbol: '207940', price: '1,601,000', change: '+0.10%', cap: '113조' },
-            { name: '현대차', symbol: '005380', price: '537,500', change: '+0.66%', cap: '112조' }
+            { name: '삼성전자', symbol: '005930', market: 'KRX', price: '조회 중...', change: '-', cap: '1,298조' },
+            { name: 'SK하이닉스', symbol: '000660', market: 'KRX', price: '조회 중...', change: '-', cap: '822조' },
+            { name: 'LG에너지솔루션', symbol: '373220', market: 'KRX', price: '조회 중...', change: '-', cap: '97조' },
+            { name: '삼성바이오로직스', symbol: '207940', market: 'KRX', price: '조회 중...', change: '-', cap: '113조' },
+            { name: '현대차', symbol: '005380', market: 'KRX', price: '조회 중...', change: '-', cap: '112조' }
         ],
         overseas: [
-            { name: 'Apple Inc.', symbol: 'AAPL', price: '263.40', change: '+1.14%', cap: '$4.12T' },
-            { name: 'Microsoft', symbol: 'MSFT', price: '420.26', change: '+2.20%', cap: '$3.12T' },
-            { name: 'NVIDIA', symbol: 'NVDA', price: '198.14', change: '+1.00%', cap: '$4.89T' },
-            { name: 'Alphabet A', symbol: 'GOOGL', price: '337.12', change: '+0.33%', cap: '$4.17T' },
-            { name: 'Tesla', symbol: 'TSLA', price: '388.90', change: '-0.78%', cap: '$1.23T' }
+            { name: 'Apple Inc.', symbol: 'AAPL', market: 'NASDAQ', price: '조회 중...', change: '-', cap: '$4.12T' },
+            { name: 'Microsoft', symbol: 'MSFT', market: 'NASDAQ', price: '조회 중...', change: '-', cap: '$3.12T' },
+            { name: 'NVIDIA', symbol: 'NVDA', market: 'NASDAQ', price: '조회 중...', change: '-', cap: '$4.89T' },
+            { name: 'Alphabet A', symbol: 'GOOGL', market: 'NASDAQ', price: '조회 중...', change: '-', cap: '$4.17T' },
+            { name: 'Tesla', symbol: 'TSLA', market: 'NASDAQ', price: '조회 중...', change: '-', cap: '$1.23T' }
         ],
         etf: [
-            { name: 'KODEX 200', symbol: '069500', price: '82,450', change: '-0.48%', cap: '6.5조' },
-            { name: 'TIGER 미국나스닥100', symbol: '133690', price: '156,200', change: '+0.36%', cap: '3.2조' },
-            { name: 'KODEX 삼성그룹', symbol: '102780', price: '15,850', change: '-0.10%', cap: '1.8조' },
-            { name: 'TIGER 2차전지테마', symbol: '305540', price: '25,400', change: '-1.50%', cap: '1.2조' },
-            { name: 'KODEX 미국S&P500TR', symbol: '379800', price: '22,800', change: '+0.26%', cap: '0.9조' }
+            { name: 'KODEX 200', symbol: '069500', market: 'KRX', price: '조회 중...', change: '-', cap: '6.5조' },
+            { name: 'TIGER 미국나스닥100', symbol: '133690', market: 'KRX', price: '조회 중...', change: '-', cap: '3.2조' },
+            { name: 'KODEX 삼성그룹', symbol: '102780', market: 'KRX', price: '조회 중...', change: '-', cap: '1.8조' },
+            { name: 'TIGER 2차전지테마', symbol: '305540', market: 'KRX', price: '조회 중...', change: '-', cap: '1.2조' },
+            { name: 'KODEX 미국S&P500TR', symbol: '379800', market: 'KRX', price: '조회 중...', change: '-', cap: '0.9조' }
         ]
     };
+
+    async function fetchRealTimePrice(symbol, market) {
+        try {
+            const res = await fetch(`/api/stock?symbol=${encodeURIComponent(symbol)}&market=${encodeURIComponent(market)}`);
+            if (!res.ok) return null;
+            const data = await res.json();
+            if (!data.priceFormatted) return null;
+            return { price: data.priceFormatted, change: data.change || '-' };
+        } catch (err) {
+            console.warn('[stock] fetch failed:', symbol, err);
+            return null;
+        }
+    }
+
+    async function refreshPrices(type) {
+        const list = marketData[type];
+        if (!list) return;
+
+        const results = await Promise.all(
+            list.map(item => fetchRealTimePrice(item.symbol, item.market))
+        );
+
+        let anyUpdated = false;
+        results.forEach((result, idx) => {
+            if (result) {
+                list[idx].price = result.price;
+                list[idx].change = result.change;
+                anyUpdated = true;
+            }
+        });
+
+        if (anyUpdated) {
+            const activeTab = document.querySelector('.sidebar nav li.active');
+            if (activeTab && activeTab.dataset.tab === type) {
+                renderMarketCapList(type);
+            }
+            if (type === 'domestic' && list[0]) {
+                updateStockDetail(list[0]);
+            }
+        }
+    }
 
     const newsData = [
         { title: '삼성전자, 1분기 영업이익 "어닝 서프라이즈" 기록', date: '2시간 전' },
@@ -108,10 +149,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const data = marketData[type] || marketData.domestic;
         data.forEach(item => {
             const li = document.createElement('li');
-            const isUp = item.change.includes('+');
+            const changeClass = item.change.includes('+') ? 'up' : item.change.includes('-') && item.change !== '-' ? 'down' : '';
             li.innerHTML = `
                 <span>${item.name} <small style="color:var(--text-secondary)">${item.symbol}</small></span>
-                <span class="${isUp ? 'up' : 'down'}">${item.price} (${item.change})</span>
+                <span class="${changeClass}">${item.price}${item.change && item.change !== '-' ? ` (${item.change})` : ''}</span>
             `;
             li.addEventListener('click', () => updateStockDetail(item));
             list.appendChild(li);
@@ -152,21 +193,37 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('current-price').innerText = item.price;
         const changeEl = document.getElementById('price-change');
         changeEl.innerText = item.change;
-        changeEl.className = item.change.includes('+') ? 'up' : 'down';
-        
-        // 차트 랜덤 업데이트 (데모)
-        mainChart.data.datasets[0].data = mainChart.data.datasets[0].data.map(v => v * (0.98 + Math.random() * 0.04));
+        changeEl.className = item.change.includes('+') ? 'up' : item.change.includes('-') && item.change !== '-' ? 'down' : '';
+
+        const basePrice = parseFloat(String(item.price).replace(/[^\d.]/g, ''));
+        if (Number.isFinite(basePrice) && basePrice > 0) {
+            const points = mainChart.data.labels.length;
+            const newData = [];
+            let value = basePrice * 0.99;
+            for (let i = 0; i < points; i++) {
+                value = value * (0.995 + Math.random() * 0.01);
+                newData.push(Math.round(value));
+            }
+            newData[points - 1] = Math.round(basePrice);
+            mainChart.data.datasets[0].data = newData;
+        }
         mainChart.data.datasets[0].borderColor = item.change.includes('+') ? '#ef4444' : '#3b82f6';
         mainChart.update();
     }
 
     // 탭 이벤트
     const tabs = document.querySelectorAll('.sidebar nav li');
+    const loadedTabs = new Set();
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             tabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
-            renderMarketCapList(tab.dataset.tab);
+            const type = tab.dataset.tab;
+            renderMarketCapList(type);
+            if (!loadedTabs.has(type) && marketData[type]) {
+                loadedTabs.add(type);
+                refreshPrices(type);
+            }
         });
     });
 
@@ -175,4 +232,12 @@ document.addEventListener('DOMContentLoaded', () => {
     renderMarketCapList('domestic');
     renderNews();
     renderFinancials();
+    loadedTabs.add('domestic');
+    refreshPrices('domestic');
+    setInterval(() => {
+        const activeTab = document.querySelector('.sidebar nav li.active');
+        if (activeTab && marketData[activeTab.dataset.tab]) {
+            refreshPrices(activeTab.dataset.tab);
+        }
+    }, 60000);
 });
